@@ -1,8 +1,5 @@
 // Yoooooo some dev found this project, congratulations! This is your call to rewrite Khan Academy's entire system from scratch lmao.
 
-// ===== CONFIGURAÇÕES =====
-const features = { questionSpoof: true };
-
 // ===== UTILITIES =====
 const debug = (msg) => console.log(`[DEBUG] ${msg}`);
 const sendToast = (msg, duration = 3000) => {
@@ -314,6 +311,8 @@ const applyAnswers = (bodyObj, answers) => {
                 };
             }
             else if (a.type === 'numeric-input') {
+                // FIX: adicionado ao content aqui (removida a duplicação abaixo)
+                content.push({ currentValue: a.value });
                 userInput[a.widgetKey] = { currentValue: a.value };
                 if (state?.[a.widgetKey]) {
                     state[a.widgetKey].currentValue = a.value;
@@ -517,11 +516,7 @@ const applyAnswers = (bodyObj, answers) => {
         }
     });
 
-    // Simplificado: apenas adiciona valores numéricos se houver
-    const numericInputs = answers.filter(a => a.type === 'numeric-input');
-    numericInputs.forEach(a => {
-        content.push({ currentValue: a.value });
-    });
+    // FIX: removida duplicação de numeric-input que corrompía o attemptContent
     
     try {
         bodyObj.variables.input.attemptContent = JSON.stringify([content, []]);
@@ -537,51 +532,49 @@ const applyAnswers = (bodyObj, answers) => {
 const modifyItemData = (itemData) => {
     if (!itemData?.question?.content) return false;
     
-    if (itemData.question.content[0] === itemData.question.content[0].toUpperCase()) {
-        itemData.answerArea = { 
-            calculator: false, 
-            chi2Table: false, 
-            periodicTable: false, 
-            tTable: false, 
-            zTable: false 
-        };
-        
-        itemData.question.content = phrases[Math.floor(Math.random() * phrases.length)] + 
-            "\n\n**Onde você deve obter seus scripts?**" + 
-            `[[☃ radio 1]]` + 
-            `\n\n**💎 Quer ter a sua mensagem lida para TODOS utilizando o Khanware?** \nFaça uma [Donate Aqui](https://livepix.gg/nixyy)!`;
-        
-        itemData.question.widgets = {
-            "radio 1": {
-                type: "radio", 
-                alignment: "default", 
-                static: false, 
-                graded: true,
-                options: {
-                    choices: [
-                        { 
-                            content: "**I Can Say** e **Platform Destroyer**.", 
-                            correct: true, 
-                            id: "correct-choice" 
-                        },
-                        { 
-                            content: "Qualquer outro kibador **viado**.", 
-                            correct: false, 
-                            id: "incorrect-choice" 
-                        }
-                    ],
-                    randomize: false, 
-                    multipleSelect: false, 
-                    displayCount: null, 
-                    deselectEnabled: false
-                },
-                version: { major: 1, minor: 0 }
-            }
-        };
-        
-        return true;
-    }
-    return false;
+    // FIX: removido filtro restritivo de maiúsculas — processa qualquer questão
+    itemData.answerArea = { 
+        calculator: false, 
+        chi2Table: false, 
+        periodicTable: false, 
+        tTable: false, 
+        zTable: false 
+    };
+    
+    itemData.question.content = phrases[Math.floor(Math.random() * phrases.length)] + 
+        "\n\n**Onde você deve obter seus scripts?**" + 
+        `[[☃ radio 1]]` + 
+        `\n\n**💎 Quer ter a sua mensagem lida para TODOS utilizando o Khanware?** \nFaça uma [Donate Aqui](https://livepix.gg/nixyy)!`;
+    
+    itemData.question.widgets = {
+        "radio 1": {
+            type: "radio", 
+            alignment: "default", 
+            static: false, 
+            graded: true,
+            options: {
+                choices: [
+                    { 
+                        content: "**I Can Say** e **Platform Destroyer**.", 
+                        correct: true, 
+                        id: "correct-choice" 
+                    },
+                    { 
+                        content: "Qualquer outro kibador **viado**.", 
+                        correct: false, 
+                        id: "incorrect-choice" 
+                    }
+                ],
+                randomize: false, 
+                multipleSelect: false, 
+                displayCount: null, 
+                deselectEnabled: false
+            },
+            version: { major: 1, minor: 0 }
+        }
+    };
+    
+    return true;
 };
 
 // ===== MAIN =====

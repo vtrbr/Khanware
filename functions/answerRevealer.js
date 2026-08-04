@@ -13,12 +13,6 @@ if (typeof features === 'undefined') {
 }
 
 // ===== FUNÇÕES AUXILIARES =====
-const debug = (msg) => console.log(`[DEBUG] ${msg}`);
-const sendToast = (msg, duration = 3000) => {
-    console.log(`[TOAST] ${msg}`);
-    // Implementação real se necessário
-};
-
 const revealAnswersInWidget = (widget, widgetKey) => {
     if (!widget || !widget.options) return false;
     
@@ -164,12 +158,7 @@ const processItemData = (itemData) => {
     let anyRevealed = false;
     const widgets = itemData.question.widgets;
     
-    // Verifica se é uma questão que deve ser processada
-    const content = itemData.question.content || '';
-    const isUpperCase = content.length > 0 && content[0] === content[0].toUpperCase();
-    
-    // Processa apenas questões específicas ou todas se configurado
-    if (!isUpperCase) return false;
+    // FIX: removido filtro restritivo de maiúsculas — processa qualquer questão
     
     Object.keys(widgets).forEach(widgetKey => {
         const widget = widgets[widgetKey];
@@ -179,7 +168,7 @@ const processItemData = (itemData) => {
     });
     
     if (anyRevealed) {
-        sendToast(`🔓 Respostas reveladas!`, 1500);
+        debug(`🔓 Respostas reveladas!`);
     }
     
     return anyRevealed;
@@ -230,7 +219,7 @@ JSON.parse = function(text, reviver) {
         });
         
         if (modified) {
-            sendToast(`✅ Respostas corretas reveladas!`, 1000);
+            debug(`✅ Respostas corretas reveladas!`);
         }
         
     } catch (e) {
@@ -243,7 +232,7 @@ JSON.parse = function(text, reviver) {
 // ===== FUNÇÃO PARA ATIVAR/DESATIVAR =====
 window.toggleAnswerRevealer = function(enable) {
     features.showAnswers = enable !== undefined ? enable : !features.showAnswers;
-    sendToast(`Answer Revealer ${features.showAnswers ? 'ativado' : 'desativado'}`, 1000);
+    debug(`Answer Revealer ${features.showAnswers ? 'ativado' : 'desativado'}`);
     return features.showAnswers;
 };
 

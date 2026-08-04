@@ -19,7 +19,7 @@ const update = async () => statsPanel.innerHTML = `
     <span style="margin: 0 8px;">|</span><span>${getTime()}</span>
 `;
 
-update(); document.body.appendChild(statsPanel); setInterval(update, 1000);
+update(); document.body.appendChild(statsPanel); setInterval(update, 5000);
 
 let isDragging = false, offsetX, offsetY;
 

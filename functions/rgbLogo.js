@@ -1,5 +1,6 @@
 plppdo.on('domChanged', () => {
-    const khanLogo = document.querySelector('svg._1rt6g9t').querySelector('path:nth-last-of-type(2)');
+    const svgEl = document.querySelector('svg._1rt6g9t');
+    const khanLogo = svgEl ? svgEl.querySelector('path:nth-last-of-type(2)') : null;
     const styleElement = document.createElement('style');
     styleElement.className = "RGBLogo"
     styleElement.textContent = `
