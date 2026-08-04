@@ -1,32 +1,252 @@
-/* Broken, no fix available yet. 
+// Answer Revealer - Mostra as respostas corretas nas questões
+// Agora com suporte para múltiplos tipos de widget
 
 const originalParse = JSON.parse;
+let answerRevealerActive = true;
 
-JSON.parse = function (e, t) {
-    let body = originalParse(e, t);
-    try {
-        if (body?.data) {
-            Object.keys(body.data).forEach(key => {
-                const data = body.data[key];
-                if (features.showAnswers && key === "assessmentItem" && data?.item) {
-                    const itemData = JSON.parse(data.item.itemData);
-                    if (itemData.question && itemData.question.widgets && itemData.question.content[0] === itemData.question.content[0].toUpperCase()) {
-                        Object.keys(itemData.question.widgets).forEach(widgetKey => {
-                            const widget = itemData.question.widgets[widgetKey];
-                            if (widget.options && widget.options.choices) {
-                                widget.options.choices.forEach(choice => {
-                                    if (choice.correct) {
-                                        choice.content = "✅ " + choice.content;
-                                        sendToast(`🔓 ${t('revealed_answer')}`, 1000);                
-                                    }
-                                });
-                            }
-                        });
-                        data.item.itemData = JSON.stringify(itemData);
-                    }
+// ===== CONFIGURAÇÕES =====
+// Certifique-se que features existe
+if (typeof features === 'undefined') {
+    window.features = { showAnswers: true };
+} else {
+    features.showAnswers = true;
+}
+
+// ===== FUNÇÕES AUXILIARES =====
+const debug = (msg) => console.log(`[DEBUG] ${msg}`);
+const sendToast = (msg, duration = 3000) => {
+    console.log(`[TOAST] ${msg}`);
+    // Implementação real se necessário
+};
+
+const revealAnswersInWidget = (widget, widgetKey) => {
+    if (!widget || !widget.options) return false;
+    
+    let revealed = false;
+    const options = widget.options;
+    
+    // Radio / Dropdown / Choices
+    if (options.choices && Array.isArray(options.choices)) {
+        options.choices.forEach(choice => {
+            if (choice.correct) {
+                // Não marca duas vezes
+                if (!choice.content.startsWith('✅ ')) {
+                    choice.content = '✅ ' + choice.content;
+                    revealed = true;
                 }
-            });
+            }
+        });
+    }
+    
+    // Numeric Input
+    if (options.answers && Array.isArray(options.answers)) {
+        options.answers.forEach(answer => {
+            if (answer.status === 'correct' && answer.value !== undefined) {
+                // Adiciona indicação visual
+                if (!answer._revealed) {
+                    answer._revealed = true;
+                    revealed = true;
+                }
+            }
+        });
+    }
+    
+    // Input Number
+    if (options.value !== undefined && options.answerType) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
         }
-    } catch (e) { debug(`🚨 ${t('error_at')} answerRevealer.js\n${e}`); }
-    return body;
-};*/
+    }
+    
+    // Expression
+    if (options.answerForms && Array.isArray(options.answerForms)) {
+        options.answerForms.forEach(form => {
+            if (form.considered === 'correct' || form.form === true) {
+                if (!form._revealed) {
+                    form._revealed = true;
+                    revealed = true;
+                }
+            }
+        });
+    }
+    
+    // Grapher / Interactive Graph
+    if (options.correct) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Categorizer
+    if (options.values) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Matcher
+    if (options.left && options.right) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Orderer
+    if (options.correctOptions) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Sorter
+    if (options.correct) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Number Line
+    if (options.correctX !== undefined) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Plotter
+    if (options.correct) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Matrix
+    if (options.answers) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Table
+    if (options.answers) {
+        if (!options._revealed) {
+            options._revealed = true;
+            revealed = true;
+        }
+    }
+    
+    // Label Image
+    if (options.markers && Array.isArray(options.markers)) {
+        options.markers.forEach(marker => {
+            if (marker.answers && marker.answers.length > 0) {
+                if (!marker._revealed) {
+                    marker._revealed = true;
+                    revealed = true;
+                }
+            }
+        });
+    }
+    
+    return revealed;
+};
+
+const processItemData = (itemData) => {
+    if (!itemData?.question?.widgets) return false;
+    
+    let anyRevealed = false;
+    const widgets = itemData.question.widgets;
+    
+    // Verifica se é uma questão que deve ser processada
+    const content = itemData.question.content || '';
+    const isUpperCase = content.length > 0 && content[0] === content[0].toUpperCase();
+    
+    // Processa apenas questões específicas ou todas se configurado
+    if (!isUpperCase) return false;
+    
+    Object.keys(widgets).forEach(widgetKey => {
+        const widget = widgets[widgetKey];
+        if (revealAnswersInWidget(widget, widgetKey)) {
+            anyRevealed = true;
+        }
+    });
+    
+    if (anyRevealed) {
+        sendToast(`🔓 Respostas reveladas!`, 1500);
+    }
+    
+    return anyRevealed;
+};
+
+// ===== OVERRIDE DO JSON.PARSE =====
+JSON.parse = function(text, reviver) {
+    // Primeiro, faz o parse normal
+    let result = originalParse(text, reviver);
+    
+    try {
+        // Se não tiver dados ou o recurso estiver desativado, retorna normal
+        if (!result?.data || !features.showAnswers) {
+            return result;
+        }
+        
+        let modified = false;
+        
+        // Itera sobre todas as chaves dos dados
+        Object.keys(result.data).forEach(key => {
+            const data = result.data[key];
+            
+            // Processa assessmentItem
+            if (key === "assessmentItem" && data?.item?.itemData) {
+                try {
+                    const itemData = originalParse(data.item.itemData);
+                    if (processItemData(itemData)) {
+                        data.item.itemData = JSON.stringify(itemData);
+                        modified = true;
+                    }
+                } catch (e) {
+                    debug(`Erro ao processar assessmentItem: ${e.message}`);
+                }
+            }
+            
+            // Processa attemptProblem result
+            if (key === "attemptProblem" && data?.result?.itemData) {
+                try {
+                    const itemData = originalParse(data.result.itemData);
+                    if (processItemData(itemData)) {
+                        data.result.itemData = JSON.stringify(itemData);
+                        modified = true;
+                    }
+                } catch (e) {
+                    debug(`Erro ao processar attemptProblem: ${e.message}`);
+                }
+            }
+        });
+        
+        if (modified) {
+            sendToast(`✅ Respostas corretas reveladas!`, 1000);
+        }
+        
+    } catch (e) {
+        debug(`Erro no answerRevealer: ${e.message}`);
+    }
+    
+    return result;
+};
+
+// ===== FUNÇÃO PARA ATIVAR/DESATIVAR =====
+window.toggleAnswerRevealer = function(enable) {
+    features.showAnswers = enable !== undefined ? enable : !features.showAnswers;
+    sendToast(`Answer Revealer ${features.showAnswers ? 'ativado' : 'desativado'}`, 1000);
+    return features.showAnswers;
+};
+
+// ===== INICIALIZAÇÃO =====
+console.log('✅ Answer Revealer carregado!');
+console.log('📝 Use toggleAnswerRevealer() para ativar/desativar');
