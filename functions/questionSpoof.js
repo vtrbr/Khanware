@@ -1,5 +1,5 @@
 
-// Khanware QuestionSpoof - Restaurado e Melhorado
+// Khanware QuestionSpoof - Versão Estabilizada (Sem GRAPHQL_ERROR)
 const debug = (msg) => console.log(`[DEBUG] Khanware: ${msg}`);
 const sendToast = (msg, duration = 3000) => {
     if (window.sendToast) window.sendToast(msg, duration);
@@ -48,11 +48,10 @@ const extractAnswers = (itemData) => {
                 const correct = w.options.answers.find(a => a.status === 'correct');
                 if (correct && correct.value !== null && correct.value !== undefined) {
                     let val = correct.value;
-                    const simplify = correct.simplify || 'required';
                     const answerForms = correct.answerForms || [];
                     if (answerForms.includes('proper') || answerForms.includes('improper') || answerForms.includes('mixed')) val = toFraction(val);
                     else val = String(val);
-                    answers.push({ type: 'numeric-input', value: val, simplify: simplify, widgetKey: key });
+                    answers.push({ type: 'numeric-input', value: val, widgetKey: key });
                 }
             } else if ((w.type === 'input-number') && w.options?.value !== undefined) {
                 let val = w.options.value;
@@ -66,22 +65,24 @@ const extractAnswers = (itemData) => {
 };
 
 const autoFillDOM = (answers) => {
-    if (!answers) return;
-    answers.forEach(a => {
-        try {
-            if (a.type === 'numeric-input' || a.type === 'input-number') {
-                const inputs = document.querySelectorAll('input[type="text"], input[type="number"]');
-                inputs.forEach(input => {
-                    if (!input.value) {
-                        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                        setter.call(input, a.value);
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                });
-            }
-        } catch (e) {}
-    });
+    if (!answers || answers.length === 0) return;
+    setTimeout(() => {
+        answers.forEach(a => {
+            try {
+                if (a.type === 'numeric-input' || a.type === 'input-number') {
+                    const inputs = document.querySelectorAll('input[type="text"], input[type="number"]');
+                    inputs.forEach(input => {
+                        if (!input.value || input.value === "") {
+                            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                            setter.call(input, a.value);
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    });
+                }
+            } catch (e) {}
+        });
+    }, 500);
 };
 
 const applyAnswers = (bodyObj, answers) => {
@@ -125,67 +126,81 @@ const modifyItemData = (itemData) => {
     return true;
 };
 
+const cleanResponse = (data, originalRes) => {
+    const headers = new Headers(originalRes.headers);
+    headers.delete('content-encoding');
+    headers.delete('content-length');
+    headers.set('content-type', 'application/json');
+    return new Response(JSON.stringify(data), {
+        status: originalRes.status,
+        statusText: originalRes.statusText,
+        headers: headers
+    });
+};
+
 if (!window._qsPrev) {
     window._qsPrev = window.fetch;
     window.fetch = async function(input, init) {
         const url = typeof input === 'string' ? input : input.url;
-        let method = init?.method || (input instanceof Request ? input.method : 'GET');
         let body = input instanceof Request ? await input.clone().text() : init?.body;
 
-        // Interceptação getAssessmentItem (incluindo ById)
         if (url.includes('getAssessmentItem')) {
             const res = await window._qsPrev.apply(this, arguments);
             const clone = res.clone();
             try {
                 const data = await clone.json();
                 let modified = false;
-                Object.keys(data.data || {}).forEach(key => {
-                    const item = data.data[key]?.item;
-                    // Tenta itemDataAnswerless (original) ou itemData (ByID)
-                    const targetField = item?.itemDataAnswerless ? 'itemDataAnswerless' : (item?.itemData ? 'itemData' : null);
-                    if (targetField) {
-                        const itemData = JSON.parse(item[targetField]);
-                        if (modifyItemData(itemData)) {
-                            item[targetField] = JSON.stringify(itemData);
-                            modified = true;
-                            // Se for ByID, já temos as respostas no itemData
-                            const ans = extractAnswers(itemData);
-                            if (ans.length > 0) setTimeout(() => autoFillDOM(ans), 500);
+                if (data.data) {
+                    Object.keys(data.data).forEach(key => {
+                        const item = data.data[key]?.item;
+                        const targetField = item?.itemDataAnswerless ? 'itemDataAnswerless' : (item?.itemData ? 'itemData' : null);
+                        if (targetField) {
+                            const originalItemData = JSON.parse(item[targetField]);
+                            const ans = extractAnswers(originalItemData);
+                            if (ans.length > 0) autoFillDOM(ans);
+                            
+                            if (modifyItemData(originalItemData)) {
+                                item[targetField] = JSON.stringify(originalItemData);
+                                modified = true;
+                            }
                         }
-                    }
-                });
-                if (modified) return new Response(JSON.stringify(data), { status: res.status, headers: res.headers });
-            } catch (e) {}
+                    });
+                }
+                if (modified) return cleanResponse(data, res);
+            } catch (e) { debug(`Erro getAssessmentItem: ${e.message}`); }
             return res;
         }
 
-        // Interceptação attemptProblem
         if (body && body.includes('"operationName":"attemptProblem"')) {
-            let bodyObj = JSON.parse(body);
-            const emptyBody = createEmptyResponse(bodyObj);
-            const firstAttempt = await window._qsPrev.call(this, url, { ...init, body: JSON.stringify(emptyBody) });
-            const responseData = await firstAttempt.json();
-            const itemData = responseData?.data?.attemptProblem?.result?.itemData;
-            if (itemData) {
-                const answers = extractAnswers(JSON.parse(itemData));
-                if (answers.length > 0) {
-                    autoFillDOM(answers);
-                    bodyObj = applyAnswers(bodyObj, answers);
-                    const secondAttempt = await window._qsPrev.call(this, url, { ...init, body: JSON.stringify(bodyObj) });
-                    const finalRes = await secondAttempt.json();
-                    if (finalRes?.data?.attemptProblem?.result?.itemData) {
-                        const resItemData = JSON.parse(finalRes.data.attemptProblem.result.itemData);
-                        if (modifyItemData(resItemData)) {
-                            finalRes.data.attemptProblem.result.itemData = JSON.stringify(resItemData);
-                            return new Response(JSON.stringify(finalRes), { status: secondAttempt.status, headers: secondAttempt.headers });
+            try {
+                let bodyObj = JSON.parse(body);
+                const emptyBody = createEmptyResponse(bodyObj);
+                const firstAttempt = await window._qsPrev.call(this, url, { ...init, body: JSON.stringify(emptyBody) });
+                const responseData = await firstAttempt.clone().json();
+                const itemData = responseData?.data?.attemptProblem?.result?.itemData;
+                
+                if (itemData) {
+                    const answers = extractAnswers(JSON.parse(itemData));
+                    if (answers.length > 0) {
+                        autoFillDOM(answers);
+                        bodyObj = applyAnswers(bodyObj, answers);
+                        const secondAttempt = await window._qsPrev.call(this, url, { ...init, body: JSON.stringify(bodyObj) });
+                        const finalRes = await secondAttempt.clone().json();
+                        
+                        if (finalRes?.data?.attemptProblem?.result?.itemData) {
+                            const resItemData = JSON.parse(finalRes.data.attemptProblem.result.itemData);
+                            if (modifyItemData(resItemData)) {
+                                finalRes.data.attemptProblem.result.itemData = JSON.stringify(resItemData);
+                                return cleanResponse(finalRes, secondAttempt);
+                            }
                         }
+                        return secondAttempt;
                     }
-                    return secondAttempt;
                 }
-            }
-            return firstAttempt;
+                return firstAttempt;
+            } catch (e) { debug(`Erro attemptProblem: ${e.message}`); }
         }
         return window._qsPrev.apply(this, arguments);
     };
-    debug("Fetch override restaurado.");
+    debug("Fetch override estabilizado.");
 }
