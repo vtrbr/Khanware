@@ -578,7 +578,8 @@ const modifyItemData = (itemData) => {
 };
 
 // ===== MAIN =====
-const originalFetch = window.fetch;
+// FIX: usar window._qsPrev para não conflitar com const originalFetch do minuteFarm.js
+window._qsPrev = window.fetch;
 const correctAnswers = new Map();
 
 window.fetch = async function(input, init) {
@@ -586,8 +587,8 @@ window.fetch = async function(input, init) {
         const url = input instanceof Request ? input.url : input;
         let body = input instanceof Request ? await input.clone().text() : init?.body;
         
-        if (features.questionSpoof && url.includes('getAssessmentItem') && body) {
-            const res = await originalFetch.apply(this, arguments);
+        if (features.questionSpoof && url.includes('getAssessmentItem')) {
+            const res = await window._qsPrev.apply(this, arguments);
             const clone = res.clone();
             try {
                 const data = await clone.json();
@@ -647,7 +648,7 @@ window.fetch = async function(input, init) {
                     init = { ...init, body: emptyBodyStr }; 
                 }
                 
-                const firstAttempt = await originalFetch.apply(this, [emptyInput || input, init]);
+                const firstAttempt = await window._qsPrev.apply(this, [emptyInput || input, init]);
                 const clone = firstAttempt.clone();
                 
                 try {
@@ -675,7 +676,7 @@ window.fetch = async function(input, init) {
                                 init.body = body; 
                             }
                             
-                            const secondAttempt = await originalFetch.apply(this, [input, init]);
+                            const secondAttempt = await window._qsPrev.apply(this, [input, init]);
                             const responseClone = secondAttempt.clone();
                             
                             try {
@@ -713,9 +714,9 @@ window.fetch = async function(input, init) {
             }
         }
         
-        return originalFetch.apply(this, arguments);
+        return window._qsPrev.apply(this, arguments);
     } catch (error) {
         debug(`Erro no fetch: ${error.message}`);
-        return originalFetch.apply(this, arguments);
+        return window._qsPrev.apply(this, arguments);
     }
 };
